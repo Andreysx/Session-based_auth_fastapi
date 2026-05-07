@@ -1,0 +1,29 @@
+/media/
+/static/
+*.sqlite3
+*.log
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.env
+
+# Database
+*.db
+
+.compose_commands
