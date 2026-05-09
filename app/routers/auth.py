@@ -6,7 +6,7 @@ from app.models.users import User
 from app.schemas import UserCreate
 from app.db_depends import get_async_db
 from app.security import verify_password
-from app.auth import create_session, delete_session, get_current_user
+from app.sessions import create_session, delete_session, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,14 +19,14 @@ async def login(user_data: UserCreate, response: Response, db: AsyncSession = De
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    create_session(user.id, response)
+    await create_session(user.id, response)
 
     return {"message": "Login in"}
 
 
 @router.post(path="/logout", status_code=status.HTTP_200_OK)
 async def logout(request: Request, response: Response):
-    delete_session(request, response)
+    await delete_session(request, response)
     return {"message": "Logged out"}
 
 

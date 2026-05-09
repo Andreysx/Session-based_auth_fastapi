@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.users import User
-from app.auth import get_current_user
+from app.sessions import get_current_user
 
 router = APIRouter(prefix="/test", tags=["test"])
 
