@@ -8,7 +8,6 @@ from app.redis_client import async_redis_client
 from app.models import User
 from app.db_depends import get_async_db
 
-# from passlib.context import CryptContext
 
 SESSION_EXPIRE_SECONDS = 120
 
@@ -47,6 +46,7 @@ async def refresh_session(session_token: str, response: Response):
     )
 
     if 0 < ttl < 30:
+        # на этом этапе можно реализовать ротацию
         await async_redis_client.expire(
             f"session:{session_hash}",
             SESSION_EXPIRE_SECONDS
