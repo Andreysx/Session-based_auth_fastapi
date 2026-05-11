@@ -8,7 +8,6 @@ from app.redis_client import async_redis_client
 from app.models import User
 from app.db_depends import get_async_db
 
-
 SESSION_EXPIRE_SECONDS = 120
 
 
@@ -83,7 +82,21 @@ async def get_current_user(request: Request, response: Response, db: AsyncSessio
     user = result.first()
 
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        await delete_session(request, response)
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    # Мгновенная инвалидация сессии если данные пользователя изменены(пользователь заблокирован, is_active=False)
+    # Можно создавать дополнительные слои авторизации и проверки прав пользователя
+    if not user.is_active:
+        await delete_session(request, response)
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is inactive"
+        )
 
     return user
 
