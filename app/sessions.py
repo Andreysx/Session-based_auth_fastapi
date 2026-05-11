@@ -10,7 +10,7 @@ from app.db_depends import get_async_db
 
 # from passlib.context import CryptContext
 
-SESSION_EXPIRE_SECONDS = 15
+SESSION_EXPIRE_SECONDS = 120
 
 
 def hash_session_token(token: str) -> str:
@@ -32,13 +32,38 @@ async def create_session(user_id: str, response: Response):
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=False,  # local
+        secure=False,  # True in production (HTTPS only)
         samesite="lax",
-        max_age=SESSION_EXPIRE_SECONDS
+        max_age=SESSION_EXPIRE_SECONDS,
+        path="/"
     )
 
 
-async def get_current_user(request: Request, db: AsyncSession = Depends(get_async_db)):
+async def refresh_session(session_token: str, response: Response):
+    session_hash = hash_session_token(session_token)
+
+    ttl = await async_redis_client.ttl(
+        f"session:{session_hash}"
+    )
+
+    if 0 < ttl < 30:
+        await async_redis_client.expire(
+            f"session:{session_hash}",
+            SESSION_EXPIRE_SECONDS
+        )
+
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=False,  # True in production (HTTPS only)
+            samesite="lax",
+            max_age=SESSION_EXPIRE_SECONDS,
+            path="/"
+        )
+
+
+async def get_current_user(request: Request, response: Response, db: AsyncSession = Depends(get_async_db)):
     session_token = request.cookies.get("session_token")
 
     if not session_token:
@@ -51,12 +76,9 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_asyn
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
 
-    # # обновление TTL(time to live) сессии при активности
-    # await async_redis_client.expire(
-    #     f"session:{session_hash}",
-    #     SESSION_EXPIRE_SECONDS
-    # )
-    # Добавить reset cookie
+    # # обновление TTL(time to live) сессии при активности в redis и cookies
+    await refresh_session(session_token, response)
+
     result = await db.scalars(select(User).where(User.id == int(user_id)))
     user = result.first()
 
@@ -76,5 +98,6 @@ async def delete_session(request: Request, response: Response):
 
     response.delete_cookie(key="session_token",
                            httponly=True,
-                           secure=False,  # local
-                           samesite="lax")
+                           secure=False,  # True in production (HTTPS only)
+                           samesite="lax",
+                           path="/")
