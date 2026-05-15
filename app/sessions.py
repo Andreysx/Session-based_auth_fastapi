@@ -45,7 +45,8 @@ async def refresh_session(session_token: str, response: Response):
     )
 
     if 0 < ttl < 30:
-        # на этом этапе можно реализовать ротацию
+        # на этом этапе можно реализовать ротацию токена
+        # в данном случае просто продление ttl
         await async_redis_client.expire(
             f"session:{session_hash}",
             SESSION_EXPIRE_SECONDS
@@ -60,6 +61,21 @@ async def refresh_session(session_token: str, response: Response):
             max_age=SESSION_EXPIRE_SECONDS,
             path="/"
         )
+
+
+async def delete_session(request: Request, response: Response):
+    session_token = request.cookies.get("session_token")
+
+    if session_token:
+        session_hash = hash_session_token(session_token)
+
+        await async_redis_client.delete(f"session:{session_hash}")
+
+    response.delete_cookie(key="session_token",
+                           httponly=True,
+                           secure=False,  # True in production (HTTPS only)
+                           samesite="lax",
+                           path="/")
 
 
 async def get_current_user(request: Request, response: Response, db: AsyncSession = Depends(get_async_db)):
@@ -84,33 +100,12 @@ async def get_current_user(request: Request, response: Response, db: AsyncSessio
     if not user:
         await delete_session(request, response)
 
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    # Мгновенная инвалидация сессии если данные пользователя изменены(пользователь заблокирован, is_active=False)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Мгновенная инвалидация(отзыв) сессии если данные пользователя изменены(пользователь заблокирован, is_active=False)
     # Можно создавать дополнительные слои авторизации и проверки прав пользователя
     if not user.is_active:
         await delete_session(request, response)
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
 
     return user
-
-
-async def delete_session(request: Request, response: Response):
-    session_token = request.cookies.get("session_token")
-
-    if session_token:
-        session_hash = hash_session_token(session_token)
-
-        await async_redis_client.delete(f"session:{session_hash}")
-
-    response.delete_cookie(key="session_token",
-                           httponly=True,
-                           secure=False,  # True in production (HTTPS only)
-                           samesite="lax",
-                           path="/")
